@@ -70,6 +70,34 @@ def get_latest_df_dict(df_dict, years_to_keep):
     
     return latest_df_dict
 
+def process_df_dict(latest_df_dict):
+    """
+    Processes the stock market data to exclude data outside trading hours and clean missing minutes or holidays.
+    
+    Parameters:
+    - latest_df_dict (dict): Dictionary containing the latest data for each stock.
+    
+    Returns:
+    - processed_df_dict (dict): Dictionary containing the processed data for each stock.
+    """
+    processed_df_dict = {}
+    
+    # Define trading hours
+    trading_start = pd.to_datetime("9:30").time()           # 9:30 AM
+    trading_end = pd.to_datetime("16:00").time()            # 4:00 PM
+    
+    for stock, df in latest_df_dict.items():
+        # Exclude data outside of trading hours
+        df = df[df['DateTime'].dt.time.between(trading_start, trading_end)]
+        
+        # Exclude data with missing minutes or days with holidays (assuming very low volume means holiday)
+        volume_threshold = df['Volume'].quantile(0.05)     
+        df = df[df['Volume'] > volume_threshold]
+        
+        processed_df_dict[stock] = df
+        
+    return processed_df_dict
+
 def scale_df_dict(df_dict):
     """
     Applies Min-Max Scaling and Scales the data in each dataframe between -1 and 1.
@@ -287,7 +315,7 @@ Epoch: [{epoch}/{num_epochs}] | Epoch Train Loss: {avg_train_loss} | Epoch Valid
     
     return model, train_losses, valid_losses
 
-def plot_losses(train_losses, valid_losses):
+def plot_losses(train_losses, valid_losses, title):
     """
     Plots training and validation losses per epoch.
     
@@ -295,23 +323,25 @@ def plot_losses(train_losses, valid_losses):
     - train_losses (list): Training losses per epoch.
     - valid_losses (list): Validation losses per epoch.
     """
+    plots_dir = pl.Path('losses_plots')
+    plots_dir.mkdir(exist_ok=True)
     epochs = range(1, len(train_losses) + 1)
     
-    plt.figure(figsize=(8, 4))
+    fig, ax = plt.subplots(figsize=(8, 4))
     
     # Plotting train losses
     plt.plot(epochs, train_losses, label='Training Loss', marker='o', color='blue')
     
     # Plotting valid losses
     plt.plot(epochs, valid_losses, label='Validation Loss', marker='o', color='red')
-    
-    plt.title('Training and Validation Losses')
+    plt.title(title)
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    
+    plot_path = plots_dir / f"{title}.png"
+    fig.savefig(plot_path, bbox_inches='tight')
     plt.show()
     
 def descale_data(scaled_data, stock, column, scalers_dict):
@@ -373,31 +403,34 @@ def create_pred_df_dict(df_dict, actual, predictions, seq_length, predict, pred_
         
     return pred_df_dict
 
-def plot_actual_vs_predicted(df_dict, predict):
+def plot_actual_vs_predicted(df_dict, predict, title):
     """
     Plots actual vs predicted values for each stock.
     
     Parameters:
     - df_dict (dict): Dictionary containing dataframes with actual vs predicted values.
     - predict (str, optional): Column name to predict. Defaults to 'Close'.
+    - save_plot (bool, optional): If True, saves the plots in 'predictions_plots' folder. Defaults to False.
     """
+
+    plots_dir = pl.Path('predictions_plots')
+    plots_dir.mkdir(exist_ok=True)
     df_dict = separate_datetime_dfs_dict(df_dict)
     stocks = list(df_dict.keys())
     for stock in stocks:
         fig, ax = plt.subplots(figsize=(10, 5))
-        
         ax.plot(df_dict[stock]['DateTime'], df_dict[stock][f'{predict} (Actual)'], label=f'{predict} Price (Actual)', color='blue')
         ax.plot(df_dict[stock]['DateTime'], df_dict[stock][f'{predict} (Predicted)'], label=f'{predict} Price (Predicted)', color='orange')
-        
-        ax.set_title(f"{stock} - Actual vs. Predicted '{predict}' Prices")
+        ax.set_title(title)
         ax.set_xlabel('Date')
         ax.set_ylabel('Closing Price')
         ax.legend()
         ax.grid(True)
         ax.xaxis.set_major_locator(plt.MaxNLocator(20))
         ax.xaxis.set_tick_params(rotation=45)
-        
         plt.tight_layout()
+        plot_path = plots_dir / f"{title}.png"
+        fig.savefig(plot_path, bbox_inches='tight')
         plt.show()
         
 def test_model(model, test_loader):
@@ -465,11 +498,11 @@ def main(stock, plot=False, **kwargs):
         'learning_rate': 0.01,
         'weight_decay': 0.03,
         'regularize': False,
-        'scaler': 'MMC',
         'years_to_keep': 10
     }
+    hyperparameters.update(kwargs)
     print(f'{"#"*100}\nLSTM-based Stock Trading System\n{"#"*100}')
-    print(f"Stock: {stock}")
+    print(f"Stock Name: {stock}")
     print(f"Hyperparameters: {hyperparameters}")
     # Override default hyperparameterss with provided arguments
     for key, value in kwargs.items():
@@ -479,7 +512,8 @@ def main(stock, plot=False, **kwargs):
     # Your code for creating df_dict, scaling, and making X and Y's
     df_dict = create_df_dict([stock])
     latest_df_dict = get_latest_df_dict(df_dict, hyperparameters['years_to_keep'])
-    scaled_df_dict, scalers_dict = scale_df_dict(latest_df_dict)
+    processed_df_dict = process_df_dict(latest_df_dict)
+    scaled_df_dict, scalers_dict = scale_df_dict(processed_df_dict)
     train_df_dict, valid_df_dict, test_df_dict = train_test_df_split(scaled_df_dict)
     
     # Making X and Y's
@@ -522,8 +556,11 @@ def main(stock, plot=False, **kwargs):
     print(pred_df_dict_test[stock])
     
     if plot:
-        plot_actual_vs_predicted(pred_df_dict_valid, predict=hyperparameters['predict'])
-        plot_actual_vs_predicted(pred_df_dict_test, predict=hyperparameters['predict'])
+        print("Training and validation loss plots are saved in the 'losses_plots' folder.")
+        plot_losses(train_losses, valid_losses, title=f"Training and Validation Losses for {stock}")
+        print("Actual vs. Predicted plots are saved in the 'predictions_plots' folder.")
+        plot_actual_vs_predicted(pred_df_dict_valid, predict=hyperparameters['predict'], title=f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {stock} on Validation Set")
+        plot_actual_vs_predicted(pred_df_dict_test, predict=hyperparameters['predict'], title=f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {stock} on Test Set")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train an LSTM model for stock prediction')
@@ -548,11 +585,8 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', type=float, help='Learning rate for training')
     parser.add_argument('--weight_decay', type=float, help='Weight decay for regularization')
     parser.add_argument('--regularize', type=bool, help='To regularize the model or not')
-    parser.add_argument('--scaler', type=str, help="Scaler to be used for normalization ('MMC' by default)")
     parser.add_argument('--years_to_keep', type=int, help='Number of years to keep for training')
-
     args = parser.parse_args()
     hyperparams = {key: value for key, value in vars(args).items() if value is not None and key not in ['stock', 'plot']}
-    
     main(args.stock, args.plot, **hyperparams)
 
