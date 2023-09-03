@@ -24,7 +24,7 @@ def create_df_dict(stocks):
     Returns:
     - df_dict (dict): A dictionary with stock names as keys and their corresponding dataframes as values.
     """
-    data_dir = pl.Path('./sp500_tickers_A-D_1min_1pppix/') 
+    data_dir = pl.Path('./dataset/sp500_tickers_A-D_1min_1pppix/') 
     df_dict = {}
     for stock in stocks:
         df = pd.read_csv(data_dir / f'{stock}_1min.txt', sep=',', header=None) # Reading the data
@@ -62,13 +62,23 @@ def get_latest_df_dict(df_dict, years_to_keep):
     - latest_df_dict (dict): Dictionary containing the latest data for each stock.
     """
     latest_df_dict = {}
-    # df_dict_temp = separate_datetime_dfs_dict(df_dict)        # Ensure that the DateTime column is converted to Date and Time columns
     for stock, df in df_dict.items():
         df['DateTime'] = pd.to_datetime(df['DateTime'])       # Convert to datetime type
-        latest_df = df[df['DateTime'] >= df['DateTime'].max() - pd.DateOffset(years=years_to_keep)]
+        
+        # Calculate the earliest DateTime value based on years_to_keep from the last date
+        offset_date = df['DateTime'].max() - pd.DateOffset(years=years_to_keep)
+        
+        # If the earliest date in the dataframe is newer than offset_date, return the entire dataframe
+        if df['DateTime'].min() > offset_date:
+            print(f"Keeping all data for {stock} since it does not have {years_to_keep} years of data.")
+            latest_df = df
+        else:
+            latest_df = df[df['DateTime'] >= offset_date]
+            
         latest_df_dict[stock] = latest_df
     
     return latest_df_dict
+
 
 def process_df_dict(latest_df_dict):
     """
@@ -235,7 +245,7 @@ class StockDataset(Dataset):
     def __getitem__(self, idx):
         return self.X[idx], self.Y[idx]
 
-def train_model(model, train_loader, valid_loader, num_epochs, learning_rate, regularize):
+def train_model(model, train_loader, valid_loader, num_epochs, learning_rate, regularize, weight_decay):
     """
     Training Loop function
     
@@ -484,7 +494,7 @@ def test_model(model, test_loader):
 def main(stock, plot=False, **kwargs):
     # Default hyperparameters
     hyperparameters = {
-        'batch_size': 64,
+        'batch_size': 128,
         'random_seed': 42,
         'few_stocks': 4,
         'start_date': '2020-01-01',
@@ -494,7 +504,7 @@ def main(stock, plot=False, **kwargs):
         'seq_length': 10,
         'pred_horizon': 1,
         'predict': 'Close',
-        'epochs': 16,
+        'epochs': 10,
         'learning_rate': 0.01,
         'weight_decay': 0.03,
         'regularize': False,
@@ -532,7 +542,7 @@ def main(stock, plot=False, **kwargs):
     # Training the model
     print("Training model...")
     model = LSTM(input_dim=X_train.shape[2], hidden_dim=hyperparameters['hidden_dim'], num_layers=hyperparameters['num_layers'], output_dim=Y_train.shape[1]).to(device)
-    trained_model, train_losses, valid_losses = train_model(model, train_loader, valid_loader, num_epochs=hyperparameters['epochs'], learning_rate=hyperparameters['learning_rate'], regularize=hyperparameters['regularize'])
+    trained_model, train_losses, valid_losses = train_model(model, train_loader, valid_loader, num_epochs=hyperparameters['epochs'], learning_rate=hyperparameters['learning_rate'], regularize=hyperparameters['regularize'], weight_decay=hyperparameters['weight_decay'])
     
     # Getting predictions and descaling on the validation sets
     with torch.no_grad():

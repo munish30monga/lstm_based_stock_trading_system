@@ -161,5 +161,4 @@ cython_debug/
 
 
 # data folders
-sp500*
-*.pth
+dataset
