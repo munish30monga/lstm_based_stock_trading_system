@@ -139,19 +139,20 @@ def train_test_df_split(df_dict):
         df['DateTime'] = pd.to_datetime(df['DateTime'])  # Ensure the DateTime column is of datetime type
         
         # Find the date that is two years before the last date in the dataframe
-        offset_date = df['DateTime'].iloc[-1] - pd.DateOffset(years=2)
+        test_offset_date = df['DateTime'].iloc[-1] - pd.DateOffset(years=2)
         
         # Separate out the last two years for the test set
-        mask = df['DateTime'] >= offset_date
-        test_df = df[mask]
+        mask_test = df['DateTime'] >= test_offset_date
+        test_df = df[mask_test]
         
-        # From the remaining data, split 10% for the validation set
-        remaining_df = df[~mask]
-        valid_length = int(0.1 * len(remaining_df))
-        valid_df = remaining_df[-valid_length:]
+        # For the validation set, separate the data two years before the test set's start date
+        valid_offset_date = test_df['DateTime'].iloc[0] - pd.DateOffset(years=2)
+        mask_valid = (df['DateTime'] >= valid_offset_date) & (df['DateTime'] < test_df['DateTime'].iloc[0])
+        valid_df = df[mask_valid]
         
         # The rest of the data is for the training set
-        train_df = remaining_df[:-valid_length]
+        mask_train = df['DateTime'] < valid_df['DateTime'].iloc[0]
+        train_df = df[mask_train]
         
         train_df_dict[stock] = train_df
         valid_df_dict[stock] = valid_df
@@ -488,13 +489,12 @@ def main(stock, plot=False, **kwargs):
         'few_stocks': 4,
         'start_date': '2020-01-01',
         'end_date': '2020-02-01',
-        'device': 'cuda' if torch.cuda.is_available() else 'cpu',
         'hidden_dim': 32,
         'num_layers': 1,
-        'seq_length': 7,
+        'seq_length': 10,
         'pred_horizon': 1,
         'predict': 'Close',
-        'epochs': 10,
+        'epochs': 16,
         'learning_rate': 0.01,
         'weight_decay': 0.03,
         'regularize': False,
@@ -531,13 +531,12 @@ def main(stock, plot=False, **kwargs):
     
     # Training the model
     print("Training model...")
-    model = LSTM(input_dim=X_train.shape[2], hidden_dim=hyperparameters['hidden_dim'], num_layers=hyperparameters['num_layers'], output_dim=Y_train.shape[1]).to(hyperparameters['device'])
+    model = LSTM(input_dim=X_train.shape[2], hidden_dim=hyperparameters['hidden_dim'], num_layers=hyperparameters['num_layers'], output_dim=Y_train.shape[1]).to(device)
     trained_model, train_losses, valid_losses = train_model(model, train_loader, valid_loader, num_epochs=hyperparameters['epochs'], learning_rate=hyperparameters['learning_rate'], regularize=hyperparameters['regularize'])
     
     # Getting predictions and descaling on the validation sets
     with torch.no_grad():
         Y_valid_pred = trained_model(X_valid.to(device)).to('cpu').numpy()
-    
     Y_valid_descaled = descale_data(scaled_data=Y_valid, stock=stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
     Y_valid_pred_descaled = descale_data(scaled_data=Y_valid_pred, stock=stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
     
@@ -575,7 +574,6 @@ if __name__ == "__main__":
     parser.add_argument('--few_stocks', type=int, help='Used in Q1 to plot few stocks')
     parser.add_argument('--start_date', type=str, help="Start date for data (default: '2020-01-01')")
     parser.add_argument('--end_date', type=str, help="End date for data (default: '2020-02-01')")
-    parser.add_argument('--device', type=str, help="Set device to 'cuda' or 'cpu'")
     parser.add_argument('--hidden_dim', type=int, help='Hidden dimensions for LSTM')
     parser.add_argument('--num_layers', type=int, help='Number of layers in LSTM')
     parser.add_argument('--seq_length', type=int, help='Sequence length for LSTM model')
