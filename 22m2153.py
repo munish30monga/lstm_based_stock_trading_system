@@ -108,6 +108,83 @@ def process_df_dict(latest_df_dict):
         
     return processed_df_dict
 
+def plot_day_by_day_CP(dfs_dict, combine_plots):
+    dfs_dict = separate_datetime_dfs_dict(dfs_dict)     # Ensure that the DateTime column is converted to Date and Time columns
+    stocks = list(dfs_dict.keys())
+    n_stocks = len(stocks)
+    
+    # Ensure the analyse_stocks folder exists, if not, create it
+    save_path = pl.Path('analyse_stocks')
+    save_path.mkdir(exist_ok=True)
+    
+    if combine_plots:  # If combine_plots is True, plot all the stocks in a single plot
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        for stock in stocks:
+            ax.plot(dfs_dict[stock]['Date'], dfs_dict[stock]['Close'], label=f'{stock} Closing Price')
+        
+        title = 'Day-by-Day Closing Price Series'
+        ax.set_title(title)
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Closing Price')
+        ax.legend()
+        ax.grid(True)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(20))
+        ax.xaxis.set_tick_params(rotation=45)
+        print(f"Saving combined plot as {title}.png in the 'analyse_stocks' folder.")
+        plt.tight_layout()
+        plt.savefig(save_path / f"{title}.png")
+        plt.show()
+    else:
+        nrows = (n_stocks + 1) // 2  # Calculate the number of rows needed for the given stocks
+
+        # Initialize the subplots with 2 columns
+        fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(15, 5 * nrows))
+        
+        # Flatten the axes for easy iteration, and then iterate only over the needed number of axes for the given stocks
+        axes = axes.ravel()
+
+        # Plot the data for each stock in stocks
+        for i, stock in enumerate(stocks):
+            ax = axes[i]
+            
+            # Plot the data using 'Date' for the x-axis and 'Close' for the y-axis
+            ax.plot(dfs_dict[stock]['Date'], dfs_dict[stock]['Close'], label=f'{stock} Closing Price')
+            
+            # Set titles and labels
+            title = f'{stock} Day-by-Day Closing Price Series'
+            ax.set_title(title)
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Closing Price')
+            ax.legend()
+            ax.grid(True)
+            
+            # Adjust the x-axis for better readability
+            ax.xaxis.set_major_locator(plt.MaxNLocator(20))
+            ax.xaxis.set_tick_params(rotation=45)
+            
+            # Save the figure for each stock
+            print(f"Saving plot for {stock} as {title}.png in the 'analyse_stocks' folder.")
+            fig.savefig(save_path / f"{title}.png")
+
+        # If the number of stocks is odd, remove the last unused subplot
+        if n_stocks % 2 == 1:
+            fig.delaxes(axes[-1])
+
+        plt.tight_layout()
+        plt.show()
+
+def analyse_stocks(stocks, disp_df = False, plot = False, years_to_keep = 10):
+    df_dict = create_df_dict(stocks)
+    latest_df_dict = get_latest_df_dict(df_dict, years_to_keep)
+    df_dict = process_df_dict(latest_df_dict)
+    if disp_df:
+        for stock in stocks:
+            print(f"Stock: {stock}")
+            print(df_dict[stock])
+    if plot:
+        plot_day_by_day_CP(df_dict, combine_plots=True)
+        
 def scale_df_dict(df_dict):
     """
     Applies Min-Max Scaling and Scales the data in each dataframe between -1 and 1.
@@ -147,27 +224,26 @@ def train_test_df_split(df_dict):
     test_df_dict = {}
     for stock, df in df_dict.items():
         df['DateTime'] = pd.to_datetime(df['DateTime'])  # Ensure the DateTime column is of datetime type
-        
+
         # Find the date that is two years before the last date in the dataframe
-        test_offset_date = df['DateTime'].iloc[-1] - pd.DateOffset(years=2)
-        
+        offset_date = df['DateTime'].iloc[-1] - pd.DateOffset(years=2)
+
         # Separate out the last two years for the test set
-        mask_test = df['DateTime'] >= test_offset_date
-        test_df = df[mask_test]
-        
-        # For the validation set, separate the data two years before the test set's start date
-        valid_offset_date = test_df['DateTime'].iloc[0] - pd.DateOffset(years=2)
-        mask_valid = (df['DateTime'] >= valid_offset_date) & (df['DateTime'] < test_df['DateTime'].iloc[0])
-        valid_df = df[mask_valid]
-        
+        mask = df['DateTime'] >= offset_date
+        test_df = df[mask]
+
+        # From the remaining data, split 10% for the validation set
+        remaining_df = df[~mask]
+        valid_length = int(0.1 * len(remaining_df))
+        valid_df = remaining_df[-valid_length:]
+
         # The rest of the data is for the training set
-        mask_train = df['DateTime'] < valid_df['DateTime'].iloc[0]
-        train_df = df[mask_train]
-        
+        train_df = remaining_df[:-valid_length]
+
         train_df_dict[stock] = train_df
         valid_df_dict[stock] = valid_df
         test_df_dict[stock] = test_df
-        
+
     return train_df_dict, valid_df_dict, test_df_dict
 
 def df_to_tensors(df, seq_length, pred_horizon, predict = 'Close'): 
@@ -491,12 +567,13 @@ def test_model(model, test_loader):
 
     return predictions, test_losses
         
-def main(stock, plot=False, **kwargs):
+def main(stocks, plot=False, **kwargs):
     # Default hyperparameters
     hyperparameters = {
         'batch_size': 128,
         'random_seed': 42,
         'few_stocks': 4,
+        'analyse_stocks': False,
         'start_date': '2020-01-01',
         'end_date': '2020-02-01',
         'hidden_dim': 32,
@@ -512,24 +589,28 @@ def main(stock, plot=False, **kwargs):
     }
     hyperparameters.update(kwargs)
     print(f'{"#"*100}\nLSTM-based Stock Trading System\n{"#"*100}')
-    print(f"Stock Name: {stock}")
+    print(f"Stock Name: {stocks[0]}")
     print(f"Hyperparameters: {hyperparameters}")
     # Override default hyperparameterss with provided arguments
     for key, value in kwargs.items():
         if key in hyperparameters:
             hyperparameters[key] = value
     
-    # Your code for creating df_dict, scaling, and making X and Y's
-    df_dict = create_df_dict([stock])
+    # Analyse stocks
+    if hyperparameters['analyse_stocks']:
+        analyse_stocks(stocks, disp_df=True, plot=True, years_to_keep=hyperparameters['years_to_keep'])
+        
+    # Creating df_dict, scaling, and making X and Y's
+    df_dict = create_df_dict(stocks)
     latest_df_dict = get_latest_df_dict(df_dict, hyperparameters['years_to_keep'])
     processed_df_dict = process_df_dict(latest_df_dict)
     scaled_df_dict, scalers_dict = scale_df_dict(processed_df_dict)
     train_df_dict, valid_df_dict, test_df_dict = train_test_df_split(scaled_df_dict)
     
     # Making X and Y's
-    X_train, Y_train = df_to_tensors(train_df_dict[stock], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
-    X_valid, Y_valid = df_to_tensors(valid_df_dict[stock], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
-    X_test, Y_test = df_to_tensors(test_df_dict[stock], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
+    X_train, Y_train = df_to_tensors(train_df_dict[stocks[0]], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
+    X_valid, Y_valid = df_to_tensors(valid_df_dict[stocks[0]], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
+    X_test, Y_test = df_to_tensors(test_df_dict[stocks[0]], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
     
     # Getting training, validation, and test data loaders
     train_dataset = StockDataset(X_train, Y_train)
@@ -541,47 +622,48 @@ def main(stock, plot=False, **kwargs):
     
     # Training the model
     print("Training model...")
-    model = LSTM(input_dim=X_train.shape[2], hidden_dim=hyperparameters['hidden_dim'], num_layers=hyperparameters['num_layers'], output_dim=Y_train.shape[1]).to(device)
+    model = LSTM(input_dim=X_train.shape[2], hidden_dim=hyperparameters['hidden_dim'], num_layers=hyperparameters['num_layers'], output_dim=Y_train.shape[1])
     trained_model, train_losses, valid_losses = train_model(model, train_loader, valid_loader, num_epochs=hyperparameters['epochs'], learning_rate=hyperparameters['learning_rate'], regularize=hyperparameters['regularize'], weight_decay=hyperparameters['weight_decay'])
     
     # Getting predictions and descaling on the validation sets
     with torch.no_grad():
         Y_valid_pred = trained_model(X_valid.to(device)).to('cpu').numpy()
-    Y_valid_descaled = descale_data(scaled_data=Y_valid, stock=stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
-    Y_valid_pred_descaled = descale_data(scaled_data=Y_valid_pred, stock=stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    Y_valid_descaled = descale_data(scaled_data=Y_valid, stock=stocks[0], column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    Y_valid_pred_descaled = descale_data(scaled_data=Y_valid_pred, stock=stocks[0], column=hyperparameters['predict'], scalers_dict=scalers_dict)
     
     # Getting predictions and descaling on the test sets
     print("Getting predictions on the test set...")
     Y_test_pred, test_losses = test_model(trained_model, test_loader)
-    Y_test_descaled = descale_data(scaled_data=Y_test, stock=stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
-    Y_test_pred_descaled = descale_data(scaled_data=Y_test_pred, stock=stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    Y_test_descaled = descale_data(scaled_data=Y_test, stock=stocks[0], column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    Y_test_pred_descaled = descale_data(scaled_data=Y_test_pred, stock=stocks[0], column=hyperparameters['predict'], scalers_dict=scalers_dict)
     
     # Print validation and test dataframes
-    print(f"Predictions on the validation set for {stock}:")
+    print(f"Predictions on the validation set for {stocks[0]}:")
     pred_df_dict_valid = create_pred_df_dict(valid_df_dict, Y_valid_descaled, Y_valid_pred_descaled, seq_length=hyperparameters['seq_length'], predict=hyperparameters['predict'], pred_horizon=hyperparameters['pred_horizon'])
-    print(pred_df_dict_valid[stock])
-    print(f"Predictions on the test set for {stock}:")
+    print(pred_df_dict_valid[stocks[0]])
+    print(f"Predictions on the test set for {stocks[0]}:")
     pred_df_dict_test = create_pred_df_dict(test_df_dict, Y_test_descaled, Y_test_pred_descaled, seq_length=hyperparameters['seq_length'], predict=hyperparameters['predict'], pred_horizon=hyperparameters['pred_horizon'])
-    print(pred_df_dict_test[stock])
+    print(pred_df_dict_test[stocks[0]])
     
     if plot:
         print("Training and validation loss plots are saved in the 'losses_plots' folder.")
-        plot_losses(train_losses, valid_losses, title=f"Training and Validation Losses for {stock}")
+        plot_losses(train_losses, valid_losses, title=f"Training and Validation Losses for {stocks[0]}")
         print("Actual vs. Predicted plots are saved in the 'predictions_plots' folder.")
-        plot_actual_vs_predicted(pred_df_dict_valid, predict=hyperparameters['predict'], title=f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {stock} on Validation Set")
-        plot_actual_vs_predicted(pred_df_dict_test, predict=hyperparameters['predict'], title=f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {stock} on Test Set")
+        plot_actual_vs_predicted(pred_df_dict_valid, predict=hyperparameters['predict'], title=f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {stocks[0]} on Validation Set")
+        plot_actual_vs_predicted(pred_df_dict_test, predict=hyperparameters['predict'], title=f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {stocks[0]} on Test Set")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train an LSTM model for stock prediction')
     
     # Required argument
-    parser.add_argument('stock', type=str, help='The stock to train the model on')
+    parser.add_argument('stocks', nargs='+', help='Stocks to train the model on')
     
     # Optional arguments
     parser.add_argument('--plot', action='store_true', help='Plot actual vs predicted values')
     parser.add_argument('--batch_size', type=int, help='Batch size for training')
     parser.add_argument('--random_seed', type=int, help='Seed for reproducibility')
     parser.add_argument('--few_stocks', type=int, help='Used in Q1 to plot few stocks')
+    parser.add_argument('--analyse_stocks', type=bool, help='Analyse stocks or not')
     parser.add_argument('--start_date', type=str, help="Start date for data (default: '2020-01-01')")
     parser.add_argument('--end_date', type=str, help="End date for data (default: '2020-02-01')")
     parser.add_argument('--hidden_dim', type=int, help='Hidden dimensions for LSTM')
@@ -595,6 +677,6 @@ if __name__ == "__main__":
     parser.add_argument('--regularize', type=bool, help='To regularize the model or not')
     parser.add_argument('--years_to_keep', type=int, help='Number of years to keep for training')
     args = parser.parse_args()
-    hyperparams = {key: value for key, value in vars(args).items() if value is not None and key not in ['stock', 'plot']}
-    main(args.stock, args.plot, **hyperparams)
+    hyperparams = {key: value for key, value in vars(args).items() if value is not None and key not in ['stocks', 'plot']}
+    main(args.stocks, args.plot, **hyperparams)
 
