@@ -322,7 +322,7 @@ class StockDataset(Dataset):
     def __getitem__(self, idx):
         return self.X[idx], self.Y[idx]
 
-def train_model(model, stocks, train_loader, valid_loader, num_epochs, learning_rate, regularize, weight_decay, save_best=False, patience=4):
+def train_model(model, stocks, train_loader, valid_loader, num_epochs, learning_rate, save_best=False, patience=4):
     """
     Training Loop function
     
@@ -332,8 +332,6 @@ def train_model(model, stocks, train_loader, valid_loader, num_epochs, learning_
     - valid_loader (DataLoader): Validation data loader.
     - num_epochs (int): Number of epochs for training.
     - learning_rate (float): Learning rate for optimization.
-    - regularize (bool): Whether to apply regularization.
-    - weight_decay (float): Weight decay for regularization.
     - save_best (bool): Whether to save the best model.
     - patience (int): For early stopping
     
@@ -345,10 +343,7 @@ def train_model(model, stocks, train_loader, valid_loader, num_epochs, learning_
     
     # Define the loss function and the optimizer
     criterion = nn.MSELoss()  # Using Mean Squared Error Loss for regression
-    if regularize:
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay = weight_decay)
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
      
     # Lists to store the average loss per epoch for training and validation
     train_losses = []
@@ -614,8 +609,6 @@ def main(stocks, plot=False, **kwargs):
         'predict': 'Close',
         'epochs': 10,
         'learning_rate': 0.01,
-        'weight_decay': 0.03,
-        'regularize': False,
         'years_to_keep': 10,
         'save_best': False,
         'patience': 4
@@ -656,7 +649,7 @@ def main(stocks, plot=False, **kwargs):
     # Training the model
     print("Training model...")
     model = LSTM(input_dim=X_train.shape[2], hidden_dim=hyperparameters['hidden_dim'], num_layers=hyperparameters['num_layers'], output_dim=Y_train.shape[1]).to(device)
-    trained_model, train_losses, valid_losses = train_model(model, stocks, train_loader, valid_loader, num_epochs=hyperparameters['epochs'], learning_rate=hyperparameters['learning_rate'], regularize=hyperparameters['regularize'], weight_decay=hyperparameters['weight_decay'], save_best=hyperparameters['save_best'], patience=hyperparameters['patience'])
+    trained_model, train_losses, valid_losses = train_model(model, stocks, train_loader, valid_loader, num_epochs=hyperparameters['epochs'], learning_rate=hyperparameters['learning_rate'], save_best=hyperparameters['save_best'], patience=hyperparameters['patience'])
     
     # Getting predictions and descaling on the validation sets
     with torch.no_grad():
@@ -706,8 +699,6 @@ if __name__ == "__main__":
     parser.add_argument('--predict', type=str, help="Predict the 'Close' or 'Open' price")
     parser.add_argument('--epochs', type=int, help='Number of epochs for training')
     parser.add_argument('--learning_rate', type=float, help='Learning rate for training')
-    parser.add_argument('--weight_decay', type=float, help='Weight decay for regularization')
-    parser.add_argument('--regularize', type=bool, help='To regularize the model or not')
     parser.add_argument('--years_to_keep', type=int, help='Number of years to keep for training')
     parser.add_argument('--save_best', type=bool, help='Save the best model')
     parser.add_argument('--patience', type=int, help='Patience for early stopping')
