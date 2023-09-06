@@ -673,7 +673,11 @@ def buy_and_sell(tema_df_dict):
 
     return buy_dict, sell_dict
 
-def plot_tema(tema_df_dict, buy_dict, sell_dict, predict):
+def plot_tema(tema_df_dict, buy_dict, sell_dict, predict, plot_title):
+    # Ensure the directory exists
+    plots_dir = pl.Path('tema_plots')
+    plots_dir.mkdir(exist_ok=True)
+
     tema_df_dict = separate_datetime_dfs_dict(tema_df_dict)
     for stock, df in tema_df_dict.items():
         fig, ax = plt.subplots(figsize=(15, 10))
@@ -700,6 +704,10 @@ def plot_tema(tema_df_dict, buy_dict, sell_dict, predict):
         ax.xaxis.set_major_locator(plt.MaxNLocator(20))
         ax.xaxis.set_tick_params(rotation=45)
         plt.tight_layout()
+        print(f"Saving Triple EMA Crossover Plots in 'tema_plots' folder...")
+        # Save the plot to the "tema_plots" folder
+        save_path = plots_dir / (plot_title + ".png")
+        plt.savefig(save_path)
         plt.show()
         
 def calculate_trade_cost(tema_df_dict, buy_dict, sell_dict, predict, bid_ask_spread, trade_commission):
@@ -747,14 +755,14 @@ def calculate_trade_cost(tema_df_dict, buy_dict, sell_dict, predict, bid_ask_spr
 
     return list_of_trades, profitable_buy_dict, profitable_sell_dict
 
-def trading_module(pred_df_dict_valid, pred_df_dict_test, hyperparameters, plot = False):
+def trading_module(pred_df_dict_valid, pred_df_dict_test, pred_stock, hyperparameters, plot = False):
     # Create tema_df_dict for validation and test sets
     tema_df_dict_valid = create_tema_df_dict(pred_df_dict_valid, column = f"{hyperparameters['predict']} (Actual)")
     tema_df_dict_test = create_tema_df_dict(pred_df_dict_test, column = f"{hyperparameters['predict']} (Predicted)")
     
     # Generate buy and sell signals for validation and test sets
-    buy_signals_valid, sell_signals_valid = generate_signals(tema_df_dict_valid[stocks[0]])
-    buy_signals_test, sell_signals_test = generate_signals(tema_df_dict_test[stocks[0]])
+    buy_signals_valid, sell_signals_valid = generate_signals(tema_df_dict_valid[pred_stock])
+    buy_signals_test, sell_signals_test = generate_signals(tema_df_dict_test[pred_stock])
     
     # Create buy and sell dictionaries for validation and test sets
     buy_dict_valid, sell_dict_valid = buy_and_sell(tema_df_dict_valid)
@@ -765,30 +773,30 @@ def trading_module(pred_df_dict_valid, pred_df_dict_test, hyperparameters, plot 
     list_of_trades_test, profitable_buy_dict_test, profitable_sell_dict_test = calculate_trade_cost(tema_df_dict_test, buy_dict_test, sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)", bid_ask_spread=hyperparameters['bid_ask_spread'], trade_commission=hyperparameters['trade_commision'])
         
     # Print buy and sell signals for validation set
-    print(f"Buy and sell signals for '{stocks[0]}' on Validation Data:")
+    print(f"Buy and sell signals for '{pred_stock}' on Validation Data:")
     print(f"Buy signals: {buy_signals_valid}")
     print(f"Sell signals: {sell_signals_valid}")
-    print(f"Profitable Buy Signals: {profitable_buy_dict_valid[stocks[0]]}")
-    print(f"Profitable Sell Signals: {profitable_sell_dict_valid[stocks[0]]}")
+    print(f"Profitable Buy Signals: {profitable_buy_dict_valid[pred_stock]}")
+    print(f"Profitable Sell Signals: {profitable_sell_dict_valid[pred_stock]}")
     print()
     
     # Print buy and sell signals for test set
-    print(f"Buy and sell signals for '{stocks[0]}' on Test Data:")
+    print(f"Buy and sell signals for '{pred_stock}' on Test Data:")
     print(f"Buy signals: {buy_signals_test}")
     print(f"Sell signals: {sell_signals_test}")
-    print(f"Profitable Buy Signals: {profitable_buy_dict_test[stocks[0]]}")
-    print(f"Profitable Sell Signals: {profitable_sell_dict_test[stocks[0]]}")
+    print(f"Profitable Buy Signals: {profitable_buy_dict_test[pred_stock]}")
+    print(f"Profitable Sell Signals: {profitable_sell_dict_test[pred_stock]}")
     print()
     
     if plot:
-        print(f"Triple EMA Crossover Plot for '{stocks[0]}' on Validation Data:")
-        plot_tema(tema_df_dict_valid, buy_dict_valid, sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)")
-        print(f"Triple EMA Crossover Plot for '{stocks[0]}' on Test Data:")
-        plot_tema(tema_df_dict_test, buy_dict_test, sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)")
-        print(f"Triple EMA Crossover Plot for '{stocks[0]}' on Validation Data (Profitable Trades Only):")
-        plot_tema(tema_df_dict_valid, profitable_buy_dict_valid, profitable_sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)")
-        print(f"Triple EMA Crossover Plot for '{stocks[0]}' on Test Data (Profitable Trades Only):")
-        plot_tema(tema_df_dict_test, profitable_buy_dict_test, profitable_sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)")
+        plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Validation Data:"
+        plot_tema(tema_df_dict_valid, buy_dict_valid, sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)", plot_title=plot_title)
+        plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Test Data:"
+        plot_tema(tema_df_dict_test, buy_dict_test, sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)", plot_title=plot_title)
+        plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Validation Data (Profitable Trades Only):"
+        plot_tema(tema_df_dict_valid, profitable_buy_dict_valid, profitable_sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)", plot_title=plot_title)
+        plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Test Data (Profitable Trades Only):"
+        plot_tema(tema_df_dict_test, profitable_buy_dict_test, profitable_sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)", plot_title=plot_title)
         
     return list_of_trades_valid, list_of_trades_test, profitable_buy_dict_valid, profitable_sell_dict_valid, profitable_buy_dict_test, profitable_sell_dict_test
 
@@ -913,7 +921,8 @@ def main(stocks, pred_stock, save_plots=False, **kwargs):
         'load_best': False,
         'patience': 4,
         'bid_ask_spread': 0.02,
-        'trade_commision': 0.1
+        'trade_commision': 0.1,
+        'trade': False
     }
     multi_stock = False
     if len(stocks) > 1:
@@ -996,10 +1005,18 @@ def main(stocks, pred_stock, save_plots=False, **kwargs):
     pred_df_dict_test = create_pred_df_dict(test_df_dict, Y_test_descaled, Y_test_pred_descaled, seq_length=hyperparameters['seq_length'], predict=hyperparameters['predict'], pred_horizon=hyperparameters['pred_horizon'])
     print(pred_df_dict_test[pred_stock])
     
+    if hyperparameters['trade']:
+        if multi_stock:
+            print("Trading not supported for multiple stocks!")
+        else:
+            print(f"Trading using the trained model for {pred_stock}...")
+            list_of_trades_valid, list_of_trades_test, profitable_buy_dict_valid, profitable_sell_dict_valid, profitable_buy_dict_test, profitable_sell_dict_test = trading_module(pred_df_dict_valid, pred_df_dict_test, pred_stock, hyperparameters, save_plots)
+    
     if save_plots:
-        print(f"Saving Training and Validation Losses Plot for {pred_stock} in 'losses_plots' folder...")
-        plot_title = f"Training and Validation Losses for {pred_stock}"
-        plot_losses(train_losses, valid_losses, title=plot_title)
+        if not hyperparameters['load_best']:
+            print(f"Saving Training and Validation Losses Plot for {pred_stock} in 'losses_plots' folder...")
+            plot_title = f"Training and Validation Losses for {pred_stock}"
+            plot_losses(train_losses, valid_losses, title=plot_title)
         print(f"Saving Actual vs. Predicted '{hyperparameters['predict']}' Prices Plot for {pred_stock} in 'predictions_plots' folder...")
         plot_title = f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {pred_stock} on Validation Set"
         plot_actual_vs_predicted(pred_df_dict_valid, predict=hyperparameters['predict'], title=plot_title)
