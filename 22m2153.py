@@ -1,3 +1,10 @@
+# EE 782: Advanced Topics in Machine Learning
+# Assignment 1: LSTM-based Stock Trading System
+# NAME: Munish Monga
+# ROLL NO: 22M2153
+# Github Repo Link: https://github.com/munish30monga/lstm_based_stock_trading_system
+
+
 import argparse
 import pandas as pd                                             # for data handling  
 import numpy as np                                              # for numerical computations               
@@ -44,10 +51,11 @@ def separate_datetime_dfs_dict(df_dict):
     """
     converted_dict = {}
     for stock, df in df_dict.items():
-        df['DateTime'] = pd.to_datetime(df['DateTime'])
-        df['Date'] = df['DateTime'].dt.date
-        df['Time'] = df['DateTime'].dt.time
-        converted_dict[stock] = df
+        df_copy = df.copy()
+        df_copy['DateTime'] = pd.to_datetime(df_copy['DateTime'])
+        df_copy['Date'] = df_copy['DateTime'].dt.date
+        df_copy['Time'] = df_copy['DateTime'].dt.time
+        converted_dict[stock] = df_copy
     return converted_dict
 
 def get_latest_df_dict(df_dict, years_to_keep):
@@ -62,23 +70,13 @@ def get_latest_df_dict(df_dict, years_to_keep):
     - latest_df_dict (dict): Dictionary containing the latest data for each stock.
     """
     latest_df_dict = {}
+    # df_dict_temp = separate_datetime_dfs_dict(df_dict)        # Ensure that the DateTime column is converted to Date and Time columns
     for stock, df in df_dict.items():
         df['DateTime'] = pd.to_datetime(df['DateTime'])       # Convert to datetime type
-        
-        # Calculate the earliest DateTime value based on years_to_keep from the last date
-        offset_date = df['DateTime'].max() - pd.DateOffset(years=years_to_keep)
-        
-        # If the earliest date in the dataframe is newer than offset_date, return the entire dataframe
-        if df['DateTime'].min() > offset_date:
-            print(f"Keeping all data for {stock} since it does not have {years_to_keep} years of data.")
-            latest_df = df
-        else:
-            latest_df = df[df['DateTime'] >= offset_date]
-            
+        latest_df = df[df['DateTime'] >= df['DateTime'].max() - pd.DateOffset(years=years_to_keep)]
         latest_df_dict[stock] = latest_df
     
     return latest_df_dict
-
 
 def process_df_dict(latest_df_dict):
     """
@@ -97,6 +95,7 @@ def process_df_dict(latest_df_dict):
     trading_end = pd.to_datetime("16:00").time()            # 4:00 PM
     
     for stock, df in latest_df_dict.items():
+        
         # Exclude data outside of trading hours
         df = df[df['DateTime'].dt.time.between(trading_start, trading_end)]
         
@@ -113,18 +112,13 @@ def plot_day_by_day_CP(dfs_dict, combine_plots):
     stocks = list(dfs_dict.keys())
     n_stocks = len(stocks)
     
-    # Ensure the analyse_stocks folder exists, if not, create it
-    save_path = pl.Path('analyse_stocks')
-    save_path.mkdir(exist_ok=True)
-    
-    if combine_plots:  # If combine_plots is True, plot all the stocks in a single plot
+    if combine_plots:                           # If combine_plots is True, plot all the stocks in a single plot
         fig, ax = plt.subplots(figsize=(10, 6))
         
         for stock in stocks:
             ax.plot(dfs_dict[stock]['Date'], dfs_dict[stock]['Close'], label=f'{stock} Closing Price')
         
-        title = 'Day-by-Day Closing Price Series'
-        ax.set_title(title)
+        ax.set_title('Day-by-Day Closing Price Series')
         ax.set_xlabel('Date')
         ax.set_ylabel('Closing Price')
         ax.legend()
@@ -133,8 +127,6 @@ def plot_day_by_day_CP(dfs_dict, combine_plots):
         ax.xaxis.set_tick_params(rotation=45)
         
         plt.tight_layout()
-        print(f"Saving combined plots as {title}.png in analyse_stocks folder.")
-        plt.savefig(save_path / f"{title}.png")
         plt.show()
     else:
         nrows = (n_stocks + 1) // 2  # Calculate the number of rows needed for the given stocks
@@ -153,8 +145,7 @@ def plot_day_by_day_CP(dfs_dict, combine_plots):
             ax.plot(dfs_dict[stock]['Date'], dfs_dict[stock]['Close'], label=f'{stock} Closing Price')
             
             # Set titles and labels
-            title = f'{stock} Day-by-Day Closing Price Series'
-            ax.set_title(title)
+            ax.set_title(f'{stock} Day-by-Day Closing Price Series')
             ax.set_xlabel('Date')
             ax.set_ylabel('Closing Price')
             ax.legend()
@@ -163,10 +154,6 @@ def plot_day_by_day_CP(dfs_dict, combine_plots):
             # Adjust the x-axis for better readability
             ax.xaxis.set_major_locator(plt.MaxNLocator(20))
             ax.xaxis.set_tick_params(rotation=45)
-            
-            # Save the figure for each stock
-            print(f"Saving plot for {stock} as {save_path / f'{title}.png in analyse_stocks folder.'}")
-            fig.savefig(save_path / f"{title}.png")
 
         # If the number of stocks is odd, remove the last unused subplot
         if n_stocks % 2 == 1:
@@ -175,14 +162,14 @@ def plot_day_by_day_CP(dfs_dict, combine_plots):
         plt.tight_layout()
         plt.show()
         
-def analyse_stocks(stocks, disp_df = False, plot = False, years_to_keep = 10):
+def analyse_stocks(stocks, disp_df = False, plot = False):
     df_dict = create_df_dict(stocks)
     latest_df_dict = get_latest_df_dict(df_dict, years_to_keep)
     df_dict = process_df_dict(latest_df_dict)
     if disp_df:
         for stock in stocks:
             print(f"Stock: {stock}")
-            print(df_dict[stock])
+            display(df_dict[stock])
     if plot:
         plot_day_by_day_CP(df_dict, combine_plots=True)
         
@@ -322,7 +309,7 @@ class StockDataset(Dataset):
     def __getitem__(self, idx):
         return self.X[idx], self.Y[idx]
 
-def train_model(model, stocks, train_loader, valid_loader, num_epochs, learning_rate, save_best=False, patience=4):
+def train_model(model, pred_stock, train_loader, valid_loader, num_epochs, learning_rate, save_best, patience):
     """
     Training Loop function
     
@@ -333,7 +320,7 @@ def train_model(model, stocks, train_loader, valid_loader, num_epochs, learning_
     - num_epochs (int): Number of epochs for training.
     - learning_rate (float): Learning rate for optimization.
     - save_best (bool): Whether to save the best model.
-    - patience (int): For early stopping
+    - patience (int): For early stopping.
     
     Returns:
     - tuple: Trained model, training losses per epoch, and validation losses per epoch.
@@ -419,10 +406,10 @@ Epoch: [{epoch}/{num_epochs}] | Epoch Train Loss: {avg_train_loss} | Epoch Valid
             break
         
     # Save the best model
-    if save_best:
+    if save_best: 
         path = pl.Path("best_models")
         path.mkdir(parents=True, exist_ok=True)
-        filename = f"Best_model_stock_{stocks[0]}_epoch_{epoch}_valid_loss_{avg_valid_loss}.pt"
+        filename = f"Best_model_stock_{pred_stock}_epoch_{epoch}_valid_loss_{avg_valid_loss}.pt"
         print(f"{filename} saved in 'best_models' folder...") 
         torch.save(model.state_dict(), path / filename)
 
@@ -523,7 +510,7 @@ def plot_actual_vs_predicted(df_dict, predict, title):
     Parameters:
     - df_dict (dict): Dictionary containing dataframes with actual vs predicted values.
     - predict (str, optional): Column name to predict. Defaults to 'Close'.
-    - save_plot (bool, optional): If True, saves the plots in 'predictions_plots' folder. Defaults to False.
+    - title (str, optional): Plot title. 
     """
 
     plots_dir = pl.Path('predictions_plots')
@@ -592,8 +579,320 @@ def test_model(model, test_loader):
     print(f'Average Test Loss: {avg_test_loss}')
 
     return predictions, test_losses
+
+def load_best_model(model, stock):
+    """
+    Load the best model for a given stock from the 'best_models' folder.
+    
+    Parameters:
+    - stock (str): Name of the stock.
+    
+    Returns:
+    - model (LSTM): Trained LSTM model.
+    """
+    # Define the path to the 'best_models' folder
+    models_path = pl.Path('best_models')
+    
+    # List all files in the 'best_models' folder and filter out model files for the given stock
+    stock_models = [f for f in models_path.iterdir() if f.name.startswith(f"Best_model_stock_{stock}")]
+    
+    # Check if there are any models for the stock
+    if not stock_models:
+        print(f"No models found for stock: {stock}")
+        return None
+    
+    # Sort the models based on validation loss (assuming naming convention holds)
+    stock_models = sorted(stock_models, key=lambda x: float(x.name.split("_valid_loss_")[1].split(".pt")[0]))
         
-def main(stocks, plot=False, **kwargs):
+    # Load the best model (with the lowest validation loss)
+    best_model_path = stock_models[0]
+    model.load_state_dict(torch.load(best_model_path))
+        
+    print(f"Loading best model for stock {stock} from {best_model_path}...")
+    return model
+
+def create_tema_df_dict(pred_df_dict, column):
+    tema_df_dict = {}
+    for stock, df in pred_df_dict.items():
+        df = df.copy()
+        df.set_index('DateTime', inplace=True)
+        
+        # Resampling the data to daily frequency for better visualization
+        if column == "Open":
+            df_daily = df.resample('D').first()
+        else:  # Assuming 'Close' or other column
+            df_daily = df.resample('D').last()
+
+        # Drop NaN rows which might occur if there's no data for some days
+        df_daily.dropna(inplace=True)
+
+        # Calculate the EMAs on the resampled data
+        df_daily['Short_EMA'] = df_daily[column].ewm(span=9, adjust=False).mean()
+        df_daily['Middle_EMA'] = df_daily[column].ewm(span=21, adjust=False).mean()
+        df_daily['Long_EMA'] = df_daily[column].ewm(span=55, adjust=False).mean()
+
+        tema_df_dict[stock] = df_daily.reset_index()
+    return tema_df_dict
+
+def generate_signals(tema_df):
+    buy_signals = []
+    sell_signals = []
+    
+    position = 0  # 0: no position, 1: holding the stock
+    
+    for i in range(1, len(tema_df)):
+        # Buy Signal
+        if tema_df['Short_EMA'].iloc[i] > tema_df['Middle_EMA'].iloc[i] and \
+           tema_df['Short_EMA'].iloc[i-1] <= tema_df['Middle_EMA'].iloc[i-1] and \
+           tema_df['Middle_EMA'].iloc[i] > tema_df['Long_EMA'].iloc[i] and \
+           position == 0:
+            buy_signals.append(tema_df.index[i])
+            position = 1
+
+        # Sell Signal
+        elif (tema_df['Short_EMA'].iloc[i] < tema_df['Middle_EMA'].iloc[i] or \
+              tema_df['Middle_EMA'].iloc[i] < tema_df['Long_EMA'].iloc[i]) and \
+              position == 1:
+            sell_signals.append(tema_df.index[i])
+            position = 0
+
+    # Ensure that for every buy signal, there's a corresponding sell signal
+    if len(buy_signals) > len(sell_signals):
+        sell_signals.append(tema_df.index[-1])  # Add the last date as a sell signal
+
+    return buy_signals, sell_signals
+
+def buy_and_sell(tema_df_dict):
+    buy_dict = {}
+    sell_dict = {}
+    
+    for stock, df in tema_df_dict.items():
+        buy_signals, sell_signals = generate_signals(df)
+        buy_dict[stock] = buy_signals
+        sell_dict[stock] = sell_signals
+
+    return buy_dict, sell_dict
+
+def plot_tema(tema_df_dict, buy_dict, sell_dict, predict):
+    tema_df_dict = separate_datetime_dfs_dict(tema_df_dict)
+    for stock, df in tema_df_dict.items():
+        fig, ax = plt.subplots(figsize=(15, 10))
+        
+        ax.plot(df['Date'], df[predict], label=f'{predict} Price', color='blue')
+        ax.plot(df['Date'], df['Short_EMA'], label='Short EMA', color='orange')
+        ax.plot(df['Date'], df['Middle_EMA'], label='Middle EMA', color='green')
+        ax.plot(df['Date'], df['Long_EMA'], label='Long EMA', color='red')
+        
+        # Extract buy and sell dates for this specific stock
+        buy_dates = [date for date in buy_dict[stock] if date in df.index]
+        sell_dates = [date for date in sell_dict[stock] if date in df.index]
+        
+        # Increase the marker size using the `s` parameter
+        ax.scatter(df.loc[buy_dates, 'Date'], df.loc[buy_dates, predict], marker='^', color='green', label='Buy Signal', s=220)
+        ax.scatter(df.loc[sell_dates, 'Date'], df.loc[sell_dates, predict], marker='v', color='red', label='Sell Signal', s=220)
+        
+        title = f"Triple Exponential Moving Average Plot for {stock}-{predict}"
+        ax.set_title(title, fontsize=20)
+        ax.set_xlabel('Date', fontsize=16)
+        ax.set_ylabel('Closing Price', fontsize=16)
+        ax.legend()
+        ax.grid(True)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(20))
+        ax.xaxis.set_tick_params(rotation=45)
+        plt.tight_layout()
+        plt.show()
+        
+def calculate_trade_cost(tema_df_dict, buy_dict, sell_dict, predict, bid_ask_spread, trade_commission):
+    list_of_trades = []
+    profitable_buy_dict = {}
+    profitable_sell_dict = {}
+
+    for stock, df in tema_df_dict.items():
+        total_profit = 0.0
+        profitable_buy_signals = []
+        profitable_sell_signals = []
+
+        buy_signals = buy_dict[stock]
+        sell_signals = sell_dict[stock]
+
+        for i in range(len(buy_signals)):
+            buy_price = df[predict].loc[buy_signals[i]]
+            sell_price = df[predict].loc[sell_signals[i]]
+
+            # Calculate the cost due to bid-ask spread
+            spread_cost_buy = bid_ask_spread / 100 * buy_price
+            spread_cost_sell = bid_ask_spread / 100 * sell_price
+
+            # Calculate the net profit or loss for this trade (excluding trade commission for now)
+            trade_profit = sell_price - buy_price - spread_cost_buy - spread_cost_sell - 2 * trade_commission
+
+            # Append to the list of trades
+            trade_details = {
+                'Stock Name': stock,
+                'Buy Price': buy_price,
+                'Sell Price': sell_price,
+                'Profit/Loss': trade_profit
+            }
+            list_of_trades.append(trade_details)
+
+            total_profit += trade_profit
+
+            # If the trade was profitable, add it to the profitable trades dictionary
+            if trade_profit > 0:
+                profitable_buy_signals.append(buy_signals[i])
+                profitable_sell_signals.append(sell_signals[i])
+
+        profitable_buy_dict[stock] = profitable_buy_signals
+        profitable_sell_dict[stock] = profitable_sell_signals
+
+    return list_of_trades, profitable_buy_dict, profitable_sell_dict
+
+def trading_module(pred_df_dict_valid, pred_df_dict_test, hyperparameters, plot = False):
+    # Create tema_df_dict for validation and test sets
+    tema_df_dict_valid = create_tema_df_dict(pred_df_dict_valid, column = f"{hyperparameters['predict']} (Actual)")
+    tema_df_dict_test = create_tema_df_dict(pred_df_dict_test, column = f"{hyperparameters['predict']} (Predicted)")
+    
+    # Generate buy and sell signals for validation and test sets
+    buy_signals_valid, sell_signals_valid = generate_signals(tema_df_dict_valid[stocks[0]])
+    buy_signals_test, sell_signals_test = generate_signals(tema_df_dict_test[stocks[0]])
+    
+    # Create buy and sell dictionaries for validation and test sets
+    buy_dict_valid, sell_dict_valid = buy_and_sell(tema_df_dict_valid)
+    buy_dict_test, sell_dict_test = buy_and_sell(tema_df_dict_test)
+    
+    # Get list of trades and profitable buy/sell dictionaries for validation and test sets
+    list_of_trades_valid, profitable_buy_dict_valid, profitable_sell_dict_valid = calculate_trade_cost(tema_df_dict_valid, buy_dict_valid, sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)", bid_ask_spread=hyperparameters['bid_ask_spread'], trade_commission=hyperparameters['trade_commision'])
+    list_of_trades_test, profitable_buy_dict_test, profitable_sell_dict_test = calculate_trade_cost(tema_df_dict_test, buy_dict_test, sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)", bid_ask_spread=hyperparameters['bid_ask_spread'], trade_commission=hyperparameters['trade_commision'])
+        
+    # Print buy and sell signals for validation set
+    print(f"Buy and sell signals for '{stocks[0]}' on Validation Data:")
+    print(f"Buy signals: {buy_signals_valid}")
+    print(f"Sell signals: {sell_signals_valid}")
+    print(f"Profitable Buy Signals: {profitable_buy_dict_valid[stocks[0]]}")
+    print(f"Profitable Sell Signals: {profitable_sell_dict_valid[stocks[0]]}")
+    print()
+    
+    # Print buy and sell signals for test set
+    print(f"Buy and sell signals for '{stocks[0]}' on Test Data:")
+    print(f"Buy signals: {buy_signals_test}")
+    print(f"Sell signals: {sell_signals_test}")
+    print(f"Profitable Buy Signals: {profitable_buy_dict_test[stocks[0]]}")
+    print(f"Profitable Sell Signals: {profitable_sell_dict_test[stocks[0]]}")
+    print()
+    
+    if plot:
+        print(f"Triple EMA Crossover Plot for '{stocks[0]}' on Validation Data:")
+        plot_tema(tema_df_dict_valid, buy_dict_valid, sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)")
+        print(f"Triple EMA Crossover Plot for '{stocks[0]}' on Test Data:")
+        plot_tema(tema_df_dict_test, buy_dict_test, sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)")
+        print(f"Triple EMA Crossover Plot for '{stocks[0]}' on Validation Data (Profitable Trades Only):")
+        plot_tema(tema_df_dict_valid, profitable_buy_dict_valid, profitable_sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)")
+        print(f"Triple EMA Crossover Plot for '{stocks[0]}' on Test Data (Profitable Trades Only):")
+        plot_tema(tema_df_dict_test, profitable_buy_dict_test, profitable_sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)")
+        
+    return list_of_trades_valid, list_of_trades_test, profitable_buy_dict_valid, profitable_sell_dict_valid, profitable_buy_dict_test, profitable_sell_dict_test
+
+def align_df_dict(df_dict):
+    """
+    Aligns the DateTime values across multiple stock dataframes.
+    
+    Parameters:
+    - df_dict (dict): Dictionary containing the latest data for each stock.
+    
+    Returns:
+    - aligned_df_dict (dict): Dictionary where all stocks have the same DateTime values.
+    """
+    # Extract DateTime sequences for each stock
+    datetime_lists = [set(df['DateTime'].values) for _, df in df_dict.items()]
+    
+    # Find the common DateTime values across all stocks
+    common_datetimes = set.intersection(*datetime_lists)
+    
+    aligned_df_dict = {}
+    for stock, df in df_dict.items():
+        aligned_df = df[df['DateTime'].isin(common_datetimes)]
+        aligned_df_dict[stock] = aligned_df.sort_values(by='DateTime')  # Ensure sorted order
+        
+    return aligned_df_dict
+
+def multi_stock_df_to_tensors(df_dict, seq_length, pred_horizon, target_stock, predict='Close'):
+    """
+    Converts aligned dataframes of multiple stocks into input and target tensors for the LSTM model.
+    
+    Parameters:
+    - df_dict (dict of pd.DataFrame): Dictionary of aligned dataframes, one for each stock.
+    - seq_length (int): Sequence Length for LSTM.
+    - pred_horizon (int): Prediction horizon.
+    - target_stock (str): The stock we're aiming to predict.
+    - predict (str, optional): Column name to predict. Defaults to 'Close'.
+    
+    Returns:
+    - X, Y (tuple): Input and target tensors.
+    """
+    
+    # Extract and combine data for all stocks (excluding DateTime columns)
+    data_arrays = [df.drop('DateTime', axis=1).values for _, df in df_dict.items()]
+    combined_data = np.concatenate([arr[..., np.newaxis] for arr in data_arrays], axis=-1)
+    
+    # Identify the target column index for the stock we're predicting
+    target_col_idx = list(df_dict[target_stock].columns).index(predict)-1       # -1 since we dropped the DateTime column
+    target_stock_idx = list(df_dict.keys()).index(target_stock)
+    
+    # Sequence extraction logic
+    X_list, Y_list = [], []
+    for i in range(seq_length, len(combined_data) - pred_horizon + 1):
+        X_list.append(combined_data[i - seq_length:i])
+        Y_list.append([combined_data[i + pred_horizon - 1, target_col_idx, target_stock_idx]])
+
+    X_np, Y_np = np.array(X_list), np.array(Y_list)
+    X, Y = torch.tensor(X_np, dtype=torch.float32), torch.tensor(Y_np, dtype=torch.float32)
+
+    return X, Y
+
+class MultiStockLSTM(nn.Module):
+    """
+    LSTM model for Multiple Stocks
+    
+    Attributes:
+    - input_dim (int): Flattened dimension for number of input features multiplied by number of stocks.
+    - hidden_dim (int): Number of hidden units.
+    - num_layers (int): Number of LSTM layers.
+    - output_dim (int): Number of output dimensions.
+    """
+    def __init__(self, input_dim, num_stocks, hidden_dim, num_layers, output_dim):
+        super(MultiStockLSTM, self).__init__()
+        
+        # Hidden dimensions and number of layers
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        
+        # Flattened input dimension
+        self.flattened_dim = input_dim * num_stocks             
+        
+        # Define the LSTM layer
+        self.lstm = nn.LSTM(self.flattened_dim, hidden_dim, num_layers, batch_first=True)
+        
+        # Define the output layer
+        self.linear = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        
+        # Reshape input data to flatten the last two dimensions
+        x = x.view(x.size(0), x.size(1), -1)
+        
+        # Initialize hidden state and cell state with zeros
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(device)
+        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(device)
+        
+        # Pass through the LSTM layers
+        out, _ = self.lstm(x, (h0, c0))
+        
+        # Only take the output from the final time step
+        out = self.linear(out[:, -1, :])
+        return out
+    
+ 
+def main(stocks, pred_stock, save_plots=False, **kwargs):
     # Default hyperparameters
     hyperparameters = {
         'batch_size': 128,
@@ -611,11 +910,19 @@ def main(stocks, plot=False, **kwargs):
         'learning_rate': 0.01,
         'years_to_keep': 10,
         'save_best': False,
-        'patience': 4
+        'load_best': False,
+        'patience': 4,
+        'bid_ask_spread': 0.02,
+        'trade_commision': 0.1
     }
+    multi_stock = False
+    if len(stocks) > 1:
+        multi_stock = True
     hyperparameters.update(kwargs)
     print(f'{"#"*100}\nLSTM-based Stock Trading System\n{"#"*100}')
-    print(f"Stock Name: {stocks[0]}")
+    if multi_stock:
+        print(f"List of Stocks: {stocks}")
+    print(f"Predicting Stock: {pred_stock}")
     print(f"Hyperparameters: {hyperparameters}")
     # Override default hyperparameterss with provided arguments
     for key, value in kwargs.items():
@@ -630,13 +937,22 @@ def main(stocks, plot=False, **kwargs):
     df_dict = create_df_dict(stocks)
     latest_df_dict = get_latest_df_dict(df_dict, hyperparameters['years_to_keep'])
     processed_df_dict = process_df_dict(latest_df_dict)
-    scaled_df_dict, scalers_dict = scale_df_dict(processed_df_dict)
+    if multi_stock:
+        aligned_df_dict = align_df_dict(processed_df_dict)
+        scaled_df_dict, scalers_dict = scale_df_dict(aligned_df_dict)
+    else:
+        scaled_df_dict, scalers_dict = scale_df_dict(processed_df_dict)
     train_df_dict, valid_df_dict, test_df_dict = train_test_df_split(scaled_df_dict)
     
     # Making X and Y's
-    X_train, Y_train = df_to_tensors(train_df_dict[stocks[0]], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
-    X_valid, Y_valid = df_to_tensors(valid_df_dict[stocks[0]], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
-    X_test, Y_test = df_to_tensors(test_df_dict[stocks[0]], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
+    if multi_stock:
+        X_train, Y_train = multi_stock_df_to_tensors(train_df_dict, seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], target_stock=pred_stock,predict=hyperparameters['predict'])
+        X_valid, Y_valid = multi_stock_df_to_tensors(valid_df_dict, seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], target_stock=pred_stock, predict=hyperparameters['predict'])
+        X_test, Y_test = multi_stock_df_to_tensors(test_df_dict, seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], target_stock=pred_stock, predict=hyperparameters['predict'])
+    else:
+        X_train, Y_train = df_to_tensors(train_df_dict[pred_stock], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
+        X_valid, Y_valid = df_to_tensors(valid_df_dict[pred_stock], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
+        X_test, Y_test = df_to_tensors(test_df_dict[pred_stock], seq_length=hyperparameters['seq_length'], pred_horizon=hyperparameters['pred_horizon'], predict=hyperparameters['predict'])
     
     # Getting training, validation, and test data loaders
     train_dataset = StockDataset(X_train, Y_train)
@@ -648,44 +964,58 @@ def main(stocks, plot=False, **kwargs):
     
     # Training the model
     print("Training model...")
-    model = LSTM(input_dim=X_train.shape[2], hidden_dim=hyperparameters['hidden_dim'], num_layers=hyperparameters['num_layers'], output_dim=Y_train.shape[1]).to(device)
-    trained_model, train_losses, valid_losses = train_model(model, stocks, train_loader, valid_loader, num_epochs=hyperparameters['epochs'], learning_rate=hyperparameters['learning_rate'], save_best=hyperparameters['save_best'], patience=hyperparameters['patience'])
+    if multi_stock:
+        model = MultiStockLSTM(input_dim=X_train.shape[2], num_stocks=X_train.shape[3], hidden_dim=hyperparameters['hidden_dim'], num_layers=hyperparameters['num_layers'], output_dim=Y_train.shape[1]).to(device)
+    else:
+        model = LSTM(input_dim=X_train.shape[2], hidden_dim=hyperparameters['hidden_dim'], num_layers=hyperparameters['num_layers'], output_dim=Y_train.shape[1]).to(device)
+    if hyperparameters['load_best']:
+        trained_model = load_best_model(model, pred_stock)
+    else:
+        trained_model, train_losses, valid_losses = train_model(model, pred_stock, train_loader, valid_loader, num_epochs=hyperparameters['epochs'], learning_rate=hyperparameters['learning_rate'], save_best=hyperparameters['save_best'], patience=hyperparameters['patience'])
     
     # Getting predictions and descaling on the validation sets
     with torch.no_grad():
         Y_valid_pred = trained_model(X_valid.to(device)).to('cpu').numpy()
-    Y_valid_descaled = descale_data(scaled_data=Y_valid, stock=stocks[0], column=hyperparameters['predict'], scalers_dict=scalers_dict)
-    Y_valid_pred_descaled = descale_data(scaled_data=Y_valid_pred, stock=stocks[0], column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    Y_valid_descaled = descale_data(scaled_data=Y_valid, stock=pred_stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    Y_valid_pred_descaled = descale_data(scaled_data=Y_valid_pred, stock=pred_stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
     
-    # Getting predictions and descaling on the test sets
-    print("Getting predictions on the test set...")
-    Y_test_pred, test_losses = test_model(trained_model, test_loader)
-    Y_test_descaled = descale_data(scaled_data=Y_test, stock=stocks[0], column=hyperparameters['predict'], scalers_dict=scalers_dict)
-    Y_test_pred_descaled = descale_data(scaled_data=Y_test_pred, stock=stocks[0], column=hyperparameters['predict'], scalers_dict=scalers_dict)
-    
-    # Print validation and test dataframes
-    print(f"Predictions on the validation set for {stocks[0]}:")
+    # Getting predictions on the validation set
+    with torch.no_grad():
+        Y_valid_pred = trained_model(X_valid.to(device)).to('cpu').numpy()
+    Y_valid_descaled = descale_data(scaled_data=Y_valid, stock=pred_stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    Y_valid_pred_descaled = descale_data(scaled_data=Y_valid_pred, stock=pred_stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    print(f"Predictions on the validation set for {pred_stock}:")
     pred_df_dict_valid = create_pred_df_dict(valid_df_dict, Y_valid_descaled, Y_valid_pred_descaled, seq_length=hyperparameters['seq_length'], predict=hyperparameters['predict'], pred_horizon=hyperparameters['pred_horizon'])
-    print(pred_df_dict_valid[stocks[0]])
-    print(f"Predictions on the test set for {stocks[0]}:")
+    print(pred_df_dict_valid[pred_stock])
+        
+    # Getting predictions on the test set
+    Y_test_pred, _ = test_model(trained_model, test_loader)
+    Y_test_descaled = descale_data(scaled_data=Y_test, stock=pred_stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    Y_test_pred_descaled = descale_data(scaled_data=Y_test_pred, stock=pred_stock, column=hyperparameters['predict'], scalers_dict=scalers_dict)
+    print(f"Predictions on the test set for {pred_stock}:")
     pred_df_dict_test = create_pred_df_dict(test_df_dict, Y_test_descaled, Y_test_pred_descaled, seq_length=hyperparameters['seq_length'], predict=hyperparameters['predict'], pred_horizon=hyperparameters['pred_horizon'])
-    print(pred_df_dict_test[stocks[0]])
+    print(pred_df_dict_test[pred_stock])
     
-    if plot:
-        print("Training and validation loss plots are saved in the 'losses_plots' folder.")
-        plot_losses(train_losses, valid_losses, title=f"Training and Validation Losses for {stocks[0]}")
-        print("Actual vs. Predicted plots are saved in the 'predictions_plots' folder.")
-        plot_actual_vs_predicted(pred_df_dict_valid, predict=hyperparameters['predict'], title=f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {stocks[0]} on Validation Set")
-        plot_actual_vs_predicted(pred_df_dict_test, predict=hyperparameters['predict'], title=f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {stocks[0]} on Test Set")
-
+    if save_plots:
+        print(f"Saving Training and Validation Losses Plot for {pred_stock} in 'losses_plots' folder...")
+        plot_title = f"Training and Validation Losses for {pred_stock}"
+        plot_losses(train_losses, valid_losses, title=plot_title)
+        print(f"Saving Actual vs. Predicted '{hyperparameters['predict']}' Prices Plot for {pred_stock} in 'predictions_plots' folder...")
+        plot_title = f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {pred_stock} on Validation Set"
+        plot_actual_vs_predicted(pred_df_dict_valid, predict=hyperparameters['predict'], title=plot_title)
+        print(f"Saving Actual vs. Predicted '{hyperparameters['predict']}' Prices Plot for {pred_stock} in 'predictions_plots' folder...")
+        plot_title = f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {pred_stock} on Test Set"
+        plot_actual_vs_predicted(pred_df_dict_test, predict=hyperparameters['predict'], title=plot_title)
+        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train an LSTM model for stock prediction')
     
-    # Required argument
-    parser.add_argument('stocks', nargs='+', help='Stocks to train the model on')
+    # Required arguments
+    parser.add_argument('--stocks', nargs='+', help='Stocks to train the model on')
+    parser.add_argument('--pred_stock', type=str, help='Target stock to predict from the list of input stocks')
     
     # Optional arguments
-    parser.add_argument('--plot', action='store_true', help='Plot actual vs predicted values')
+    parser.add_argument('--save_plots', type=bool, help='Plot actual vs predicted values')
     parser.add_argument('--batch_size', type=int, help='Batch size for training')
     parser.add_argument('--random_seed', type=int, help='Seed for reproducibility')
     parser.add_argument('--few_stocks', type=int, help='Used in Q1 to plot few stocks')
@@ -701,8 +1031,12 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', type=float, help='Learning rate for training')
     parser.add_argument('--years_to_keep', type=int, help='Number of years to keep for training')
     parser.add_argument('--save_best', type=bool, help='Save the best model')
+    parser.add_argument('--load_best', type=bool, help='Load the best model')
     parser.add_argument('--patience', type=int, help='Patience for early stopping')
+    parser.add_argument('--bid_ask_spread', type=float, help='Bid-ask spread for trading')
+    parser.add_argument('--trade_commision', type=float, help='Trade commission for trading')
+    parser.add_argument('--trade', type=bool, help='Trade using the trained model')
     args = parser.parse_args()
-    hyperparams = {key: value for key, value in vars(args).items() if value is not None and key not in ['stocks', 'plot']}
-    main(args.stocks, args.plot, **hyperparams)
+    hyperparams = {key: value for key, value in vars(args).items() if value is not None and key not in ['stocks', 'pred_stock','save_plots']}
+    main(args.stocks, args.pred_stock, args.save_plots, **hyperparams)
 
