@@ -107,6 +107,25 @@ def process_df_dict(latest_df_dict):
         
     return processed_df_dict
 
+def extend_df_dict(df_dict):
+    """
+    Adds a "DayOfWeek" column to each dataframe in the processed dictionary.
+    
+    Parameters:
+    - df_dict (dict): Dictionary containing the processed data for each stock.
+    
+    Returns:
+    - extended_df_dict (dict): Dictionary with dataframes containing an additional "DayOfWeek" column.
+    """
+    extended_df_dict = {}
+    
+    for stock, df in df_dict.items():
+        # Extract day of the week from the DateTime column and add to the dataframe
+        df['DayOfWeek'] = df['DateTime'].dt.dayofweek + 1          # Mon-1 ... Fri-5
+        extended_df_dict[stock] = df
+        
+    return extended_df_dict
+
 def plot_day_by_day_CP(dfs_dict, combine_plots):
     dfs_dict = separate_datetime_dfs_dict(dfs_dict)     # Ensure that the DateTime column is converted to Date and Time columns
     stocks = list(dfs_dict.keys())
@@ -922,7 +941,8 @@ def main(stocks, pred_stock, save_plots=False, **kwargs):
         'patience': 4,
         'bid_ask_spread': 0.02,
         'trade_commision': 0.1,
-        'trade': False
+        'trade': False,
+        'add_day_of_week': False
     }
     multi_stock = False
     if len(stocks) > 1:
@@ -949,6 +969,10 @@ def main(stocks, pred_stock, save_plots=False, **kwargs):
     if multi_stock:
         aligned_df_dict = align_df_dict(processed_df_dict)
         scaled_df_dict, scalers_dict = scale_df_dict(aligned_df_dict)
+    elif hyperparameters['add_day_of_week']:
+        print(f"Adding day of week as an input feature to {pred_stock}...")
+        extended_df_dict = extend_df_dict(processed_df_dict)
+        scaled_df_dict, scalers_dict = scale_df_dict(extended_df_dict)
     else:
         scaled_df_dict, scalers_dict = scale_df_dict(processed_df_dict)
     train_df_dict, valid_df_dict, test_df_dict = train_test_df_split(scaled_df_dict)
@@ -1053,6 +1077,7 @@ if __name__ == "__main__":
     parser.add_argument('--bid_ask_spread', type=float, help='Bid-ask spread for trading')
     parser.add_argument('--trade_commision', type=float, help='Trade commission for trading')
     parser.add_argument('--trade', type=bool, help='Trade using the trained model')
+    parser.add_argument('--add_day_of_week', type=bool, help='Add day of week as an input feature')
     args = parser.parse_args()
     hyperparams = {key: value for key, value in vars(args).items() if value is not None and key not in ['stocks', 'pred_stock','save_plots']}
     main(args.stocks, args.pred_stock, args.save_plots, **hyperparams)
