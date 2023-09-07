@@ -3,11 +3,15 @@
 ### LSTM-based Stock Trading System
 
 ### Instructions:
-1. Navigate to the project directory: 
+1. Clone the repository using:
+    ```bash
+    git clone https://github.com/munish30monga/lstm_based_stock_trading_system
+   ```
+2. Navigate to the project directory: 
    ```bash
     cd lstm_based_stock_trading_system
    ```
-2. Install the requirements using: 
+3. Install the requirements using: 
     ```bash
     pip install -r requirements.txt
     ```
@@ -15,7 +19,7 @@
     ```bash
     conda env create -f EE_782.yml
     ```
-3. Give the appropriate command line argument, check the help using:
+4. Give the appropriate command line argument, check the help using:
     ```bash
     python 22m2153.py --help
     ```
@@ -62,13 +66,13 @@
 3. **Invoking Trading Module (use only with Single Stock):**
    
    ```bash
-   python 22m2153.py --stocks AAPL --pred_stock AAPL --trade True
+   python 22m2153.py --stocks AAPL --pred_stock AAPL --trade True --save_plots True
    ```  
 4. **Changing Hyperparameters:**
    
    ```bash
-   python 22m2153.py --stocks AAPL --pred_stock AAPL --seq_length 50 --pred_horizon 5 --hidden_dim 128 --num_layers 4 --add_day_of_week True 
+   python 22m2153.py --stocks AAPL --pred_stock AAPL --seq_length 50 --pred_horizon 5 --add_day_of_week True 
    ```
 
 ### Owner:
->[![Munish](https://img.shields.io/badge/22M2153-Munish_Monga-blue)](https://github.com/munish30monga)
+[![Munish](https://img.shields.io/badge/22M2153-Munish_Monga-blue)](https://github.com/munish30monga)
