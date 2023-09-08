@@ -11,7 +11,11 @@
    ```bash
     cd lstm_based_stock_trading_system
    ```
-3. Install the requirements using: 
+3. Download the [dataset](https://iitbacin-my.sharepoint.com/:u:/r/personal/asethi_iitb_ac_in/Documents/EE782/sp500_tickers_A-D_1min_1pppix.zip?csf=1&web=1&e=3KPFu6) and paste the extracted folder inside the `dataset` directory:
+   ```bash
+   lstm_based_stock_trading_system/dataset/sp500_tickers_A-D_1min_1pppix/(txt_files_here)
+   ```
+4. Install the requirements using: 
     ```bash
     pip install -r requirements.txt
     ```
@@ -19,7 +23,7 @@
     ```bash
     conda env create -f EE_782.yml
     ```
-4. Give the appropriate command line argument, check the help using:
+5. Give the appropriate command line argument, check the help using:
     ```bash
     python 22m2153.py --help
     ```
