@@ -434,7 +434,7 @@ Epoch: [{epoch}/{num_epochs}] | Epoch Train Loss: {avg_train_loss} | Epoch Valid
 
     return model, train_losses, valid_losses
 
-def plot_losses(train_losses, valid_losses, title):
+def plot_losses(train_losses, valid_losses, title, save_plots=False):
     """
     Plots training and validation losses per epoch.
     
@@ -459,8 +459,10 @@ def plot_losses(train_losses, valid_losses, title):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plot_path = plots_dir / f"{title}.png"
-    fig.savefig(plot_path, bbox_inches='tight')
+    if save_plots:
+        print(f"Saving {title} in 'losses_plots' folder...")
+        plot_path = plots_dir / f"{title}.png"
+        fig.savefig(plot_path, bbox_inches='tight')
     plt.show()
     
 def descale_data(scaled_data, stock, column, scalers_dict):
@@ -522,7 +524,7 @@ def create_pred_df_dict(df_dict, actual, predictions, seq_length, predict, pred_
         
     return pred_df_dict
 
-def plot_actual_vs_predicted(df_dict, predict, title):
+def plot_actual_vs_predicted(df_dict, predict, title, save_plots=False):
     """
     Plots actual vs predicted values for each stock.
     
@@ -548,9 +550,12 @@ def plot_actual_vs_predicted(df_dict, predict, title):
         ax.xaxis.set_major_locator(plt.MaxNLocator(20))
         ax.xaxis.set_tick_params(rotation=45)
         plt.tight_layout()
-        plot_path = plots_dir / f"{title}.png"
-        fig.savefig(plot_path, bbox_inches='tight')
+        if save_plots:
+            plot_path = plots_dir / f"{title}.png"
+            fig.savefig(plot_path, bbox_inches='tight')
         plt.show()
+    if save_plots:
+        print(f"Saving {title} in 'predictions_plots' folder...")
         
 def test_model(model, test_loader):
     """
@@ -692,7 +697,7 @@ def buy_and_sell(tema_df_dict):
 
     return buy_dict, sell_dict
 
-def plot_tema(tema_df_dict, buy_dict, sell_dict, predict, plot_title):
+def plot_tema(tema_df_dict, buy_dict, sell_dict, predict, plot_title, save_plots=False):
     # Ensure the directory exists
     plots_dir = pl.Path('tema_plots')
     plots_dir.mkdir(exist_ok=True)
@@ -714,8 +719,7 @@ def plot_tema(tema_df_dict, buy_dict, sell_dict, predict, plot_title):
         ax.scatter(df.loc[buy_dates, 'Date'], df.loc[buy_dates, predict], marker='^', color='green', label='Buy Signal', s=220)
         ax.scatter(df.loc[sell_dates, 'Date'], df.loc[sell_dates, predict], marker='v', color='red', label='Sell Signal', s=220)
         
-        title = f"Triple Exponential Moving Average Plot for {stock}-{predict}"
-        ax.set_title(title, fontsize=20)
+        ax.set_title(plot_title, fontsize=20)
         ax.set_xlabel('Date', fontsize=16)
         ax.set_ylabel('Closing Price', fontsize=16)
         ax.legend()
@@ -724,9 +728,12 @@ def plot_tema(tema_df_dict, buy_dict, sell_dict, predict, plot_title):
         ax.xaxis.set_tick_params(rotation=45)
         plt.tight_layout()
         # Save the plot to the "tema_plots" folder
-        save_path = plots_dir / (plot_title + ".png")
-        plt.savefig(save_path)
+        if save_plots:
+            save_path = plots_dir / (plot_title + ".png")
+            plt.savefig(save_path)
         plt.show()
+    if save_plots:
+        print(f"Saving {plot_title} in 'tema_plots' folder...")
         
 def calculate_trade_cost(tema_df_dict, buy_dict, sell_dict, predict, bid_ask_spread, trade_commission):
     list_of_trades = []
@@ -773,7 +780,7 @@ def calculate_trade_cost(tema_df_dict, buy_dict, sell_dict, predict, bid_ask_spr
 
     return list_of_trades, profitable_buy_dict, profitable_sell_dict
 
-def trading_module(pred_df_dict_valid, pred_df_dict_test, pred_stock, hyperparameters, plot = False):
+def trading_module(pred_df_dict_valid, pred_df_dict_test, pred_stock, hyperparameters, save_plots = False):
     # Create tema_df_dict for validation and test sets
     tema_df_dict_valid = create_tema_df_dict(pred_df_dict_valid, column = f"{hyperparameters['predict']} (Actual)")
     tema_df_dict_test = create_tema_df_dict(pred_df_dict_test, column = f"{hyperparameters['predict']} (Predicted)")
@@ -806,16 +813,14 @@ def trading_module(pred_df_dict_valid, pred_df_dict_test, pred_stock, hyperparam
     print(f"Profitable Sell Signals: {profitable_sell_dict_test[pred_stock]}")
     print()
     
-    if plot:
-        print(f"Saving Triple EMA Crossover Plots for '{pred_stock}' in 'tema_plots' folder...")
-        plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Validation Data"
-        plot_tema(tema_df_dict_valid, buy_dict_valid, sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)", plot_title=plot_title)
-        plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Test Data"
-        plot_tema(tema_df_dict_test, buy_dict_test, sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)", plot_title=plot_title)
-        plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Validation Data (Profitable Trades Only)"
-        plot_tema(tema_df_dict_valid, profitable_buy_dict_valid, profitable_sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)", plot_title=plot_title)
-        plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Test Data (Profitable Trades Only)"
-        plot_tema(tema_df_dict_test, profitable_buy_dict_test, profitable_sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)", plot_title=plot_title)
+    plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Validation Data"
+    plot_tema(tema_df_dict_valid, buy_dict_valid, sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)", plot_title=plot_title, save_plots=save_plots)
+    plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Test Data"
+    plot_tema(tema_df_dict_test, buy_dict_test, sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)", plot_title=plot_title, save_plots=save_plots)
+    plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Validation Data (Profitable Trades Only)"
+    plot_tema(tema_df_dict_valid, profitable_buy_dict_valid, profitable_sell_dict_valid, predict=f"{hyperparameters['predict']} (Actual)", plot_title=plot_title, save_plots=save_plots)
+    plot_title = f"Triple EMA Crossover Plot for '{pred_stock}' on Test Data (Profitable Trades Only)"
+    plot_tema(tema_df_dict_test, profitable_buy_dict_test, profitable_sell_dict_test, predict=f"{hyperparameters['predict']} (Predicted)", plot_title=plot_title, save_plots=save_plots)
         
     return list_of_trades_valid, list_of_trades_test, profitable_buy_dict_valid, profitable_sell_dict_valid, profitable_buy_dict_test, profitable_sell_dict_test
 
@@ -919,7 +924,7 @@ class MultiStockLSTM(nn.Module):
         return out
     
  
-def main(stocks, pred_stock, save_plots=False, **kwargs):
+def main(stocks, pred_stock, **kwargs):
     # Default hyperparameters
     hyperparameters = {
         'batch_size': 128,
@@ -942,7 +947,8 @@ def main(stocks, pred_stock, save_plots=False, **kwargs):
         'bid_ask_spread': 0.02,
         'trade_commision': 0.1,
         'trade': False,
-        'add_day_of_week': False
+        'add_day_of_week': False,
+        'save_plots': False
     }
     multi_stock = False
     if len(stocks) > 1:
@@ -1029,24 +1035,21 @@ def main(stocks, pred_stock, save_plots=False, **kwargs):
     pred_df_dict_test = create_pred_df_dict(test_df_dict, Y_test_descaled, Y_test_pred_descaled, seq_length=hyperparameters['seq_length'], predict=hyperparameters['predict'], pred_horizon=hyperparameters['pred_horizon'])
     print(pred_df_dict_test[pred_stock])
     
+    if not hyperparameters['load_best']:
+        plot_title = f"Training and Validation Losses for {pred_stock}"
+        plot_losses(train_losses, valid_losses, title=plot_title, save_plots=hyperparameters['save_plots'])
+    plot_title = f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {pred_stock} on Validation Set"
+    plot_actual_vs_predicted(pred_df_dict_valid, predict=hyperparameters['predict'], title=plot_title, save_plots=hyperparameters['save_plots'])
+    plot_title = f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {pred_stock} on Test Set"
+    plot_actual_vs_predicted(pred_df_dict_test, predict=hyperparameters['predict'], title=plot_title, save_plots=hyperparameters['save_plots'])
+    
     if hyperparameters['trade']:
         if multi_stock:
             print("Trading not supported for multiple stocks!")
         else:
             print(f"Trading using the trained model for {pred_stock}...")
-            list_of_trades_valid, list_of_trades_test, profitable_buy_dict_valid, profitable_sell_dict_valid, profitable_buy_dict_test, profitable_sell_dict_test = trading_module(pred_df_dict_valid, pred_df_dict_test, pred_stock, hyperparameters, save_plots)
+            list_of_trades_valid, list_of_trades_test, profitable_buy_dict_valid, profitable_sell_dict_valid, profitable_buy_dict_test, profitable_sell_dict_test = trading_module(pred_df_dict_valid, pred_df_dict_test, pred_stock, hyperparameters, save_plots= hyperparameters['save_plots'])
     
-    if save_plots:
-        if not hyperparameters['load_best']:
-            print(f"Saving Training and Validation Losses Plot for {pred_stock} in 'losses_plots' folder...")
-            plot_title = f"Training and Validation Losses for {pred_stock}"
-            plot_losses(train_losses, valid_losses, title=plot_title)
-        print(f"Saving Actual vs. Predicted '{hyperparameters['predict']}' Prices Plot for {pred_stock} in 'predictions_plots' folder...")
-        plot_title = f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {pred_stock} on Validation Set"
-        plot_actual_vs_predicted(pred_df_dict_valid, predict=hyperparameters['predict'], title=plot_title)
-        plot_title = f"Actual vs. Predicted '{hyperparameters['predict']}' Prices for {pred_stock} on Test Set"
-        plot_actual_vs_predicted(pred_df_dict_test, predict=hyperparameters['predict'], title=plot_title)
-        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train an LSTM model for stock prediction')
     
@@ -1055,7 +1058,7 @@ if __name__ == "__main__":
     parser.add_argument('--pred_stock', type=str, help='Target stock to predict from the list of input stocks')
     
     # Optional arguments
-    parser.add_argument('--save_plots', type=bool, help='Plot actual vs predicted values')
+    parser.add_argument('--save_plots', type=bool, help='Save the plots or not')
     parser.add_argument('--batch_size', type=int, help='Batch size for training')
     parser.add_argument('--random_seed', type=int, help='Seed for reproducibility')
     parser.add_argument('--few_stocks', type=int, help='Used in Q1 to plot few stocks')
@@ -1078,6 +1081,6 @@ if __name__ == "__main__":
     parser.add_argument('--trade', type=bool, help='Trade using the trained model')
     parser.add_argument('--add_day_of_week', type=bool, help='Add day of week as an input feature')
     args = parser.parse_args()
-    hyperparams = {key: value for key, value in vars(args).items() if value is not None and key not in ['stocks', 'pred_stock','save_plots']}
-    main(args.stocks, args.pred_stock, args.save_plots, **hyperparams)
+    hyperparams = {key: value for key, value in vars(args).items() if value is not None and key not in ['stocks', 'pred_stock']}
+    main(args.stocks, args.pred_stock, **hyperparams)
 
