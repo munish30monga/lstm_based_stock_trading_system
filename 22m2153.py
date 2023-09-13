@@ -99,6 +99,9 @@ def process_df_dict(latest_df_dict):
         # Exclude data outside of trading hours
         df = df[df['DateTime'].dt.time.between(trading_start, trading_end)]
         
+        # Exclude weekends
+        df = df[~df['DateTime'].dt.weekday.isin([5, 6])]
+        
         # Exclude data with missing minutes or days with holidays (assuming very low volume means holiday)
         volume_threshold = df['Volume'].quantile(0.05)     
         df = df[df['Volume'] > volume_threshold]
