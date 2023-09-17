@@ -184,14 +184,14 @@ def plot_day_by_day_CP(dfs_dict, combine_plots):
         plt.tight_layout()
         plt.show()
         
-def analyse_stocks(stocks, disp_df = False, plot = False):
+def analyse_stocks(stocks, disp_df = False, plot = False, years_to_keep = 10):
     df_dict = create_df_dict(stocks)
     latest_df_dict = get_latest_df_dict(df_dict, years_to_keep)
     df_dict = process_df_dict(latest_df_dict)
     if disp_df:
         for stock in stocks:
             print(f"Stock: {stock}")
-            display(df_dict[stock])
+            df_dict[stock]
     if plot:
         plot_day_by_day_CP(df_dict, combine_plots=True)
         
